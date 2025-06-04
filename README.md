@@ -48,11 +48,13 @@ antigen bundle yourusername/sops-crypt
 
 The plugin provides the following commands:
 
-- `sops-encrypt-all [directory]` - Encrypt all matching files in directory and subdirectories
+- `sops-encrypt-all [--force|-f] [directory]` - Encrypt all matching files in directory and subdirectories
 - `sops-decrypt-all [directory]` - Decrypt all encrypted files in directory and subdirectories
-- `sops-encrypt <file>` - Encrypt a single file
+- `sops-encrypt [--force|-f] <file>` - Encrypt a single file
 - `sops-decrypt <file>` - Decrypt a single file
 - `sops-crypt-config` - Show current configuration
+
+The `--force` or `-f` flag allows you to re-encrypt all files, even if they haven't been modified since the last encryption.
 
 ### File Naming Convention
 
@@ -74,11 +76,20 @@ sops-encrypt-all
 # Encrypt all matching files in specific directory
 sops-encrypt-all ./configs
 
+# Force re-encryption of all files (ignoring timestamp checks)
+sops-encrypt-all --force
+
+# Force re-encryption of files in specific directory
+sops-encrypt-all --force ./configs
+
 # Decrypt all encrypted files in current directory and subdirectories
 sops-decrypt-all
 
 # Encrypt a single file
 sops-encrypt secrets-secret.yaml
+
+# Force re-encryption of a single file
+sops-encrypt --force secrets-secret.yaml
 
 # Decrypt a single file
 sops-decrypt secrets-secret.enc.yaml

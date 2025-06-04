@@ -48,6 +48,23 @@ _sops_is_encrypted() {
   return $?
 }
 
+# Helper function to check if encrypted file is up-to-date with source file
+# Returns 0 if encryption is needed, 1 if not
+_sops_needs_encrypt() {
+  local source_file="$1"
+  local encrypted_file="$2"
+  
+  if [[ ! -f "$encrypted_file" ]]; then
+    return 0
+  fi
+  
+  if [[ "$source_file" -nt "$encrypted_file" ]]; then
+    return 0
+  fi
+  
+  return 1
+}
+
 # Helper function to determine which search tool to use
 _sops_get_search_tool() {
   if [[ "$SOPS_CRYPT_SEARCH_TOOL" == "find" ]]; then
@@ -107,17 +124,41 @@ _sops_filter_files() {
 
 # Function to encrypt all unencrypted files in current directory and subdirectories
 sops-encrypt-all() {
-  local dir="${1:-.}"
+  local dir="."
+  local force=0
+  
+  # Parse arguments: handle both positional and flag arguments
+  for arg in "$@"; do
+    if [[ "$arg" == "--force" || "$arg" == "-f" ]]; then
+      force=1
+    elif [[ -d "$arg" ]]; then
+      dir="$arg"
+    fi
+  done
+  
   local count=0
+  local skipped=0
   local files=($(_sops_filter_files "$dir" "encrypt"))
 
   echo "🔍 Scanning for secret files to encrypt in $dir and subdirectories..."
   
+  if [[ "$force" -eq 1 ]]; then
+    echo "🔥 Force mode enabled - All files will be re-encrypted regardless of timestamps"
+  fi
+  
   for file in "${files[@]}"; do
-    echo "🔒 Encrypting: $file"
     local ext=".${file##*.}"
     local base="${file%$ext}"
     local output_file="${base}${SOPS_CRYPT_ENCRYPTED_INFIX}${ext}"
+    
+    # Check if encryption is needed, skip the check if force is enabled
+    if [[ "$force" -eq 0 ]] && ! _sops_needs_encrypt "$file" "$output_file"; then
+      echo "⏭️  Skipping: $file (encrypted file is up-to-date)"
+      ((skipped++))
+      continue
+    fi
+    
+    echo "🔒 Encrypting: $file"
     
     if sops --encrypt "$file" > "$output_file"; then
       ((count++))
@@ -126,8 +167,12 @@ sops-encrypt-all() {
     fi
   done
 
-  if [[ $count -eq 0 ]]; then
+  if [[ $count -eq 0 && $skipped -eq 0 ]]; then
     echo "✅ No secret files found to encrypt."
+  elif [[ $count -eq 0 && $skipped -gt 0 ]]; then
+    echo "✅ No files encrypted, $skipped files already up-to-date."
+  elif [[ $skipped -gt 0 ]]; then
+    echo "✅ Encrypted $count files successfully, skipped $skipped up-to-date files."
   else
     echo "✅ Encrypted $count files successfully."
   fi
@@ -168,10 +213,21 @@ sops-decrypt-all() {
 
 # Function to encrypt a single file
 sops-encrypt() {
-  local file="$1"
+  local file=""
+  local force=0
   
-  if [[ ! -f "$file" ]]; then
-    echo "❌ File not found: $file"
+  # Parse arguments
+  for arg in "$@"; do
+    if [[ "$arg" == "--force" || "$arg" == "-f" ]]; then
+      force=1
+    elif [[ -f "$arg" ]]; then
+      file="$arg"
+    fi
+  done
+  
+  if [[ -z "$file" ]]; then
+    echo "❌ No valid file provided"
+    echo "Usage: sops-encrypt [--force|-f] <file>"
     return 1
   fi
   
@@ -186,11 +242,21 @@ sops-encrypt() {
     echo "   Files intended for encryption should be named like: config${SOPS_CRYPT_SECRET_SUFFIX}.yaml"
   fi
   
-  echo "🔒 Encrypting: $file"
-  
   local ext=".${file##*.}"
   local base="${file%$ext}"
   local output_file="${base}${SOPS_CRYPT_ENCRYPTED_INFIX}${ext}"
+  
+  if [[ "$force" -eq 1 ]]; then
+    echo "🔥 Force mode enabled - File will be re-encrypted regardless of timestamps"
+  fi
+  
+  # Check if encryption is needed (file changed), skip the check if force is enabled
+  if [[ "$force" -eq 0 ]] && ! _sops_needs_encrypt "$file" "$output_file"; then
+    echo "⏭️  Skipping: $file (encrypted file is up-to-date)"
+    return 0
+  fi
+  
+  echo "🔒 Encrypting: $file"
   
   if sops --encrypt "$file" > "$output_file"; then
     echo "✅ Encrypted successfully: $output_file"
@@ -256,6 +322,12 @@ sops-crypt-config() {
   echo "\nℹ️ File naming examples:"
   echo "  Secret file:     config${SOPS_CRYPT_SECRET_SUFFIX}.yaml"
   echo "  Encrypted file:  config${SOPS_CRYPT_SECRET_SUFFIX}${SOPS_CRYPT_ENCRYPTED_INFIX}.yaml"
+  
+  echo "\n🔄 Available commands and options:"
+  echo "  sops-encrypt-all [--force|-f] [directory]  - Encrypt all secret files (optionally forcing re-encryption)"
+  echo "  sops-encrypt [--force|-f] <file>           - Encrypt a single file (optionally forcing re-encryption)"
+  echo "  sops-decrypt-all [directory]               - Decrypt all encrypted files"
+  echo "  sops-decrypt <file>                        - Decrypt a single file"
   
   echo "\n📑 Override configuration with environment variables:"
   echo "  export SOPS_CRYPT_FILE_PATTERNS=\"*.yaml *.json *.env\""
