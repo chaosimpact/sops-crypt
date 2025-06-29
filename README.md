@@ -22,7 +22,7 @@ A ZSH plugin for Mozilla SOPS that provides one-click encryption and decryption 
 
 ```zsh
 # Clone repository
-git clone https://github.com/yourusername/sops-crypt ~/.oh-my-zsh/custom/plugins/sops-crypt
+git clone https://github.com/chaosimpact/sops-crypt ~/.oh-my-zsh/custom/plugins/sops-crypt
 
 # Add to plugins list in .zshrc
 plugins=(... sops-crypt)
@@ -41,7 +41,7 @@ plugins=(... sops-crypt)
 #### Antigen
 
 ```zsh
-antigen bundle yourusername/sops-crypt
+antigen bundle chaosimpact/sops-crypt
 ```
 
 ## Usage
